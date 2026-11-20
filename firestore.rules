@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function member() {
+   return request.auth != null && exists(/databases/$(database)/documents/familyMembers/$(request.auth.uid));
+  }
+  function editor() {
+   return member() && get(/databases/$(database)/documents/familyMembers/$(request.auth.uid)).data.editor == true;
+  }
+  match /familyMembers/{uid} {
+   allow get: if request.auth != null && request.auth.uid == uid;
+  }
+  match /family/calendar {
+   allow read: if member();
+   allow create: if editor() && request.resource.data.keys().hasOnly(['revision','state']) && request.resource.data.revision == 1 && request.resource.data.state is map;
+   allow update: if editor() && request.resource.data.keys().hasOnly(['revision','state']) && request.resource.data.revision == resource.data.revision + 1 && request.resource.data.state is map;
+  }
+ }
+}
