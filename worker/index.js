@@ -7,10 +7,11 @@ const keys = new Map();
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const json = (body, status = 200) => Response.json(body, { status, headers });
 
-export async function identity(request, env) {
+async function verifyIdentity(request, env) {
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   const issuer = env.ACCESS_ISSUER;
-  if (!token || !issuer || !env.ACCESS_AUD || !/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(issuer)) return null;
+  if (!issuer || !env.ACCESS_AUD || !/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(issuer)) return { error: 'config' };
+  if (!token) return { error: 'session' };
   if (!keys.has(issuer)) keys.set(issuer, createRemoteJWKSet(new URL('/cdn-cgi/access/certs', issuer)));
   let email;
   try {
@@ -18,20 +19,31 @@ export async function identity(request, env) {
       issuer, audience: env.ACCESS_AUD, algorithms: ['RS256'],
       requiredClaims: ['exp', 'iat', 'sub']
     });
-    if (typeof payload.email !== 'string') return null;
-    email = payload.email.toLowerCase();
+    if (typeof payload.email !== 'string' || !payload.email.trim()) return { error: 'email' };
+    email = payload.email.trim().toLowerCase();
   } catch {
-    return null;
+    return { error: 'session' };
   }
   const members = JSON.parse(env.FAMILY_MEMBERS || '{}');
   const member = Object.hasOwn(members, email) ? members[email] : null;
   if (member?.readOnly === true && typeof member.name === 'string' && member.name.trim()) {
-    return { name: member.name.trim(), editor: false, readOnly: true };
+    return { user: { name: member.name.trim(), editor: false, readOnly: true } };
   }
   return people.includes(member?.name)
-    ? { name: member.name, editor: member.editor === true }
-    : null;
+    ? { user: { name: member.name, editor: member.editor === true } }
+    : { error: 'profile' };
 }
+
+export async function identity(request, env) {
+  return (await verifyIdentity(request, env)).user ?? null;
+}
+
+const accessMessages = {
+  config: 'Configurazione Cloudflare Access incompleta (ACCESS-CONFIG).',
+  session: 'Il calendario non riesce a convalidare la sessione Cloudflare (ACCESS-SESSION).',
+  email: 'La sessione Cloudflare non contiene un indirizzo email (ACCESS-EMAIL).',
+  profile: 'Accesso Cloudflare riuscito. Manca il profilo per questa email (ACCESS-PROFILE).'
+};
 
 async function load(db) {
   const row = await db.prepare('SELECT revision, state FROM calendar WHERE id = 1').first();
@@ -77,10 +89,10 @@ export default {
     }
     if (url.pathname !== '/api/calendar') return json({ message: 'Pagina non trovata.' }, 404);
     try {
-      const user = await identity(request, env);
+      const { user, error } = await verifyIdentity(request, env);
       return user
         ? await calendar(request, env.CALENDAR_DB, user, url.origin)
-        : json({ message: 'Accedi con un account familiare autorizzato.' }, 401);
+        : json({ message: accessMessages[error] }, error === 'profile' ? 403 : 401);
     } catch {
       return json({ message: 'Calendario condiviso temporaneamente non disponibile.' }, 500);
     }
