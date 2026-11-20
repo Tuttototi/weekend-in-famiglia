@@ -25,6 +25,9 @@ export async function identity(request, env) {
   }
   const members = JSON.parse(env.FAMILY_MEMBERS || '{}');
   const member = Object.hasOwn(members, email) ? members[email] : null;
+  if (member?.readOnly === true && typeof member.name === 'string' && member.name.trim()) {
+    return { name: member.name.trim(), editor: false, readOnly: true };
+  }
   return people.includes(member?.name)
     ? { name: member.name, editor: member.editor === true }
     : null;
@@ -44,7 +47,7 @@ export async function calendar(request, db, user, origin) {
     return json({ ...data, user });
   }
   if (request.method !== 'PUT') return json({ message: 'Metodo non supportato.' }, 405);
-  if (request.headers.get('Origin') !== origin) return json({ message: 'Modifica non autorizzata.' }, 403);
+  if (user.readOnly || request.headers.get('Origin') !== origin) return json({ message: 'Modifica non autorizzata.' }, 403);
   if (!request.headers.get('Content-Type')?.startsWith('application/json')) return json({ message: 'Formato non valido.' }, 415);
   let input;
   try { input = await request.json(); } catch { return json({ message: 'Dati non validi.' }, 400); }
