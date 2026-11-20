@@ -20,7 +20,7 @@ const tag=(p,compact=false)=>'<span class="tag '+(colors[people.indexOf(p)]||'op
 const btn=(text,action,cls='')=>'<button type="button" class="'+cls+'" data-action="'+action+'">'+text+'</button>';
 const canEdit=()=>!cloud||user?.editor;
 const actor=()=>user?.name||tabActor;
-const canEditExtra=()=>!cloud||Boolean(user&&(cloudflare||user.editor));
+const canEditExtra=()=>!cloud||Boolean(user&&!user.readOnly&&(cloudflare||user.editor));
 const canEditSlot=slot=>slot?.type==='Extra'?canEditExtra()&&slot.person===actor():Boolean(slot&&canEdit());
 const editButton=(t,a,c)=>canEdit()?btn(t,a,c):'';
 const field=(caption,name,type,value='',properties='required')=>'<label>'+caption+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+properties+'></label>';
