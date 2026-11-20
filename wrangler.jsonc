@@ -13,7 +13,7 @@
     {
       "binding": "CALENDAR_DB",
       "database_name": "weekend-in-famiglia",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "52211d1b-2cb4-4bcd-8538-70d05cff05e4",
       "migrations_dir": "migrations"
     }
   ]
